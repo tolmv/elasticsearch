@@ -1,4 +1,5 @@
 # elasticsearch
+Посмотреть полное описание можно через /uuid_full_text_similar.txt
 Parent UUID: f29043d6-1153-4407-bd1b-33a633a1a7e5
 Parent Row:
 -------------
