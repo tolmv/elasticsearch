@@ -172,9 +172,7 @@ def update_similar_products(conn, product_uuid: str, similar_uuids: List[str]):
 def process_chunk(chunk: List[Dict[str, Any]], conn, es: Elasticsearch):
     insert_products(conn, chunk)
     index_products(es, chunk)
-    for product in chunk:
-        similar_uuids = find_similar_products(es, product)
-        update_similar_products(conn, product["uuid"], similar_uuids)
+
 
 
 def connect_with_retry(connect_func, max_retries=5, delay=5):
@@ -276,11 +274,34 @@ def main():
         es = connect_with_retry(lambda: Elasticsearch([os.environ["ELASTICSEARCH_URL"]]))
         logger.info("Connected to Elasticsearch")
 
-        create_products_index(es)
+        file_path = "elektronika_products_20240924_074730.xml"
+        context = ET.iterparse(file_path, events=("start", "end"))
 
+        categories = parse_categories(context)
+        logger.info(f"Parsed {len(categories)} categories")
+
+        context = ET.iterparse(file_path, events=("start", "end"))
+
+        chunk_size = 1000
+        chunk = []
         start_time = time.time()
-        product_count = 0
 
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            for product in parse_products(context, categories):
+                chunk.append(product)
+                if len(chunk) >= chunk_size:
+                    executor.submit(process_chunk, chunk, conn, es)
+                    chunk = []
+
+            if chunk:  
+                executor.submit(process_chunk, chunk, conn, es)
+
+        end_time = time.time()
+        logger.info(f"Processed XML and added to PostgreSQL in {end_time - start_time:.2f} seconds")
+
+        create_products_index(es)
+        
+        product_count = 0
         all_products = []  
 
         for i, batch in enumerate(fetch_products_from_db(conn, batch_size=1000)):
@@ -306,15 +327,6 @@ def main():
         end_time = time.time()
         logger.info(f"Processed {product_count} products in {end_time - start_time:.2f} seconds")
 
-        test_product = {
-            "uuid": "1e731ee4-2fa7-4a49-b6ed-4bbe2ea83e18",
-            "title": """43" Телевизор artel UA43H3401 2019, стальной""",
-            "description": "",
-            "brand": "artel"
-        }
-        logger.info(f"Test product: {test_product}")
-        similar_skus = find_and_update_similar_products(es, conn, test_product)
-        logger.info(f"Similar SKUs for test product: {similar_skus}")
 
     except Exception as e:
         logger.error(f"An error occurred: {e}")
