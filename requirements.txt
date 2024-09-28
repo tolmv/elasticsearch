@@ -1,3 +1,5 @@
 psycopg2-binary==2.9.3
 elasticsearch==7.14.0
 lxml==4.6.3
+pydantic-settings
+pydantic
